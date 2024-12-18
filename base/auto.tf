@@ -1,16 +1,16 @@
 locals {
-  tags = merge(var.tags, {})
+  config = yamldecode(file("./resources/demos3creation.yaml"))
 }
 
 resource "aws_s3_bucket" "this" {
-  bucket              = var.bucket
-  force_destroy       = var.force_destroy
-  object_lock_enabled = var.object_lock_enabled
-  tags                = merge(var.tags, {})
+  bucket              = local.config.bucket
+  force_destroy       = local.config
+  object_lock_enabled = local.config.object_lock_enabled
+  tags                = merge(local.config.tags, {})
 
   lifecycle {
     ignore_changes = [
-      tags
+      local.config.tags
     ]
   }
 }
@@ -23,37 +23,21 @@ resource "aws_s3_bucket_ownership_controls" "this" {
 }
 resource "aws_s3_bucket_acl" "this" {
   bucket     = aws_s3_bucket.this.id
-  acl        = var.acl
+  acl        = local.config.acl
   depends_on = [aws_s3_bucket_public_access_block.this, aws_s3_bucket_ownership_controls.this]
 }
 
 resource "aws_s3_bucket_public_access_block" "this" {
   bucket                  = aws_s3_bucket.this.id
-  block_public_acls       = try(lower(var.acl), null) == "private" ? true : false
-  block_public_policy     = try(lower(var.acl), null) == "private" ? true : false
-  ignore_public_acls      = try(lower(var.acl), null) == "private" ? true : false
-  restrict_public_buckets = try(lower(var.acl), null) == "private" ? true : false
+  block_public_acls       = try(lower(local.config.acl), null) == "private" ? true : false
+  block_public_policy     = try(lower(local.config.acl), null) == "private" ? true : false
+  ignore_public_acls      = try(lower(local.config.acl), null) == "private" ? true : false
+  restrict_public_buckets = try(lower(local.config.acl), null) == "private" ? true : false
 }
 
 resource "aws_s3_bucket_versioning" "versioning" {
   bucket = aws_s3_bucket.this.id
   versioning_configuration {
-    status = var.enable_versioning ? "Enabled" : "Suspended"
+    status = local.config.enable_versioning ? "Enabled" : "Suspended"
   }
 }
-
-# bucket = "phongvupham-unique-name-161618122024"
-
-# acl = "private"
-
-# force_destroy = true
-
-# object_lock_enabled = false
-
-# enable_versioning = true
-
-# tags = {
-#   Environment = "dev"
-#   Project     = "MyS3BucketProject"
-# }
-
