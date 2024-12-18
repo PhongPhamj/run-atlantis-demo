@@ -3,5 +3,5 @@ projects:
 - name: S3
     dir: workspaces/851725403398/ap-southeast-1
     autoplan:
-    when_modified: ["modules/**/*.tf","*.tf","resources/*.yaml"]
-    enabled: true
+        when_modified: ["modules/**/*.tf","*.tf","resources/*.yaml"]
+        enabled: true
