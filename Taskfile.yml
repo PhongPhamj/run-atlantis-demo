@@ -1,0 +1,96 @@
+version: '3'
+dotenv: ['setup.config']
+
+env:
+  PROJECT:
+    sh: "basename {{.PWD}}"
+  CMD:
+    sh: (which docker > /dev/null 2>&1; if [ $$? -eq 0 ]; then echo "docker"; fi)
+  IMAGE: "hashicorp/terraform:${TF_VERSION}"
+  TEMPLATER: maclarensg/gotemplater
+  PLATFORM:
+    sh: (case $(uname -m) in x86_64) echo "linux/amd64" ;; arm64 | aarch64) echo "linux/arm64" ;; arm*) echo "linux/arm/v7" ;; *) echo "Unsupported platform" && exit 1 ;; esac)
+
+tasks:
+  debug:
+    desc: "Print out viarables set before exexuting tasks"
+    cmds:
+      - echo "TIER:{{.TIER}}"
+      - echo "TF_VERSION:{{.TF_VERSION}}"
+      - echo "DOMAIN:{{.DOMAIN}}"
+      - echo "CMD:{{.CMD}}"
+      - echo "IMAGE:{{.IMAGE}}"
+      - echo "PLATFORM:{{.PLATFORM}}"
+      - echo "RELATIVE_PATH:{{.RELATIVE_PATH}}"
+      - echo "PROFILE:{{.PROFILE}}"
+
+  shell:
+    desc: "Run a shell in the container"
+    vars:
+      ACCOUNT: '{{default "" .ACCOUNT}}'
+      REGION: '{{default "ap-southeast-1" .REGION}}'
+      GROUP: '{{default "" .GROUP}}'
+      WS_PATH: '$(case ${TIER} in 1) echo "{{.ACCOUNT}}" ;; 2) echo "{{.ACCOUNT}}/{{.REGION}}" ;; 3) echo "{{.ACCOUNT}}/{{.REGION}}/{{.GROUP}}" ;; *) echo "Unsupported tier" && exit 1 ;; esac)'
+      COMMAND: '{{.CMD}} run --platform {{.PLATFORM}} --rm -it -e AWS_PROFILE={{.PROFILE}} -v {{.HOME}}/.aws:/root/.aws -v {{.PWD}}/.gitconfig:/root/.gitconfig -v {{.PWD}}:/tf -v {{.PWD}}/local_modules:/tf/workspaces/{{.WS_PATH}}/local_modules -w /tf/workspaces/{{.WS_PATH}} --entrypoint \"\" {{.IMAGE}}'
+    cmds:
+      - |
+        [ "{{.ACCOUNT}}" ] || ( echo "ACCOUNT is required."; exit 1 )
+        [ "{{.TIER}}" -ge 2 ] && [ -z "{{.REGION}}" ] && echo "REGION is required." && exit 1 || true
+        [ "{{.TIER}}" -eq 3 ] && [ -z "{{.GROUP}}" ] && echo "GROUP is required." && exit 1 || true
+      - echo "{{.ACCOUNT}}"
+      - echo "{{.REGION}}"
+      - echo "{{.WS_PATH}}"
+      - eval "{{.COMMAND}}" /bin/sh
+
+  scaffold:
+    desc: "Scaffold a workspace"
+    vars:
+      ACCOUNT: '{{default "" .ACCOUNT}}'
+      ACCOUNT_ID: '{{default "" .ACCOUNT_ID}}'
+      REGION: '{{default "ap-southeast-1" .REGION}}'
+      GROUP: '{{default "" .GROUP}}'
+      WS_PATH: '$(case ${TIER} in 1) echo "{{.ACCOUNT}}" ;; 2) echo "{{.ACCOUNT}}/{{.REGION}}" ;; 3) echo "{{.ACCOUNT}}/{{.REGION}}/{{.GROUP}}" ;; *) echo "Unsupported tier" && exit 1 ;; esac)'
+      KEY_PATH: '$(case ${TIER} in 1) echo "{{.ACCOUNT}}/{{.PROJECT}}" ;; 2) echo "{{.ACCOUNT}}/{{.PROJECT}}/{{.REGION}}" ;; 3) echo "{{.ACCOUNT}}/{{.PROJECT}}/{{.REGION}}/{{.GROUP}}" ;; *) echo "Unsupported tier" && exit 1 ;; esac)'
+      RELATIVE_WS_PATH: '$(case "${TIER}" in 1) echo "../..";; 2) echo "../../..";; 3) echo "../../../../";; esac)'
+      RENDER: '{{.CMD}} run --platform {{.PLATFORM}} --rm -it -v {{.PWD}}:/tf -w /tf {{.TEMPLATER}}'
+    cmds:
+      - |
+        [ "{{.ACCOUNT}}" ]    || ( echo "ACCOUNT is required."; exit 1 )
+        [ "{{.ACCOUNT_ID}}" ] || ( echo "ACCOUNT_ID is required."; exit 1 )
+        [ "{{.TIER}}" -ge 2 ] && [ -z "{{.REGION}}" ] && echo "REGION is required." && exit 1 || true
+        [ "{{.TIER}}" -eq 3 ] && [ -z "{{.GROUP}}" ] && echo "GROUP is required." && exit 1 || true
+      - | 
+        [ -d "workspaces/{{.WS_PATH}}" ] && echo "Workspace already exists." && exit 1 || mkdir -p workspaces/{{.WS_PATH}}
+        [ -d "workspaces/{{.WS_PATH}}/local_modules" ]  || ( cd workspaces/{{.WS_PATH}}; ln -s {{.RELATIVE_WS_PATH}}/local_modules . )
+        [ -f "workspaces/{{.WS_PATH}}/auto.tf" ]   	   || ( cd workspaces/{{.WS_PATH}}; ln -s {{.RELATIVE_WS_PATH}}/base/auto.tf . )
+        [ -f "workspaces/{{.WS_PATH}}/main.tf" ]   	   || ( touch ./workspaces/{{.WS_PATH}}/main.tf )
+        [ -f "workspaces/{{.WS_PATH}}/vars.tf" ]   	   || ( cp ./base/vars.tf ./workspaces/{{.WS_PATH}}/ ) 
+        [ -d "workspaces/{{.WS_PATH}}/resources" ] 	   || ( mkdir -p workspaces/{{.WS_PATH}}/resources; echo "{}" > workspaces/{{.WS_PATH}}/resources/main.yaml; ) 
+      - |
+        echo "ACCOUNT: {{.ACCOUNT}}" > tmp/.config
+        echo "ACCOUNT_ID: {{.ACCOUNT_ID}}" >> tmp/.config
+        [ "{{.TIER}}" -ge 2 ] && echo "REGION: {{.REGION}}" >> tmp/.config
+        [ "{{.TIER}}" -eq 3 ] && echo "GROUP: {{.GROUP}}" >> tmp/.config
+        echo "PROJECT: {{.PROJECT}}" >> tmp/.config
+        echo "DOMAIN: {{.DOMAIN}}" >> tmp/.config
+        echo "TIER: {{.TIER}}" >> tmp/.config
+        echo "KEY_PATH: {{.KEY_PATH}}" >> tmp/.config
+        {{.RENDER}} gotemplater -d /tf/tmp/.config -t /tf/base/provider.tf.gotmpl -o /tf/workspaces/{{.WS_PATH}}/provider.tf     
+        {{.RENDER}} gotemplater -d /tf/tmp/.config -t /tf/base/terraform.auto.tfvars.gotmpl -o /tf/workspaces/{{.WS_PATH}}/terraform.auto.tfvars
+
+  unscaffold:
+    desc: "Unscaffold a workspace"
+    vars:
+      ACCOUNT: '{{default "" .ACCOUNT}}'
+      REGION: '{{default "ap-southeast-1" .REGION}}'
+      GROUP: '{{default "" .GROUP}}'
+      WS_PATH: '$(case ${TIER} in 1) echo "{{.ACCOUNT}}" ;; 2) echo "{{.ACCOUNT}}/{{.REGION}}" ;; 3) echo "{{.ACCOUNT}}/{{.REGION}}/{{.GROUP}}" ;; *) echo "Unsupported tier" && exit 1 ;; esac)'
+    cmds:
+      - |
+        [ "{{.ACCOUNT}}" ] || ( echo "ACCOUNT is required."; exit 1 )
+        [ "{{.TIER}}" -ge 2 ] && [ -z "{{.REGION}}" ] && echo "REGION is required." && exit 1 || true
+        [ "{{.TIER}}" -eq 3 ] && [ -z "{{.GROUP}}" ] && echo "GROUP is required." && exit 1 || true
+      - |
+        echo "{{.WS_PATH}}"
+        [ -d "workspaces/{{.WS_PATH}}" ] || ( echo "Workspace does not exist."; exit 1 )
+        rm -rf workspaces/{{.WS_PATH}}

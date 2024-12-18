@@ -1,0 +1,19 @@
+terraform {
+  backend "s3" {
+    bucket = "devops.terraform.{{.DOMAIN}}"
+    key    = "{{.KEY_PATH}}/state.tfstate"
+    region = "ap-southeast-1"
+    dynamodb_table = "ngp-terraform-lock-backend-replication"
+  }
+}
+
+provider "aws" {
+  region = var.region
+  assume_role {
+    role_arn = "arn:aws:iam::{{.ACCOUNT_ID}}:role/spacelift"
+  }
+}
+
+variable "region" {
+  default = "ap-southeast-1"
+}
