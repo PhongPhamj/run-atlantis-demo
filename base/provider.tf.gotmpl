@@ -1,9 +1,9 @@
 terraform {
   backend "s3" {
-    bucket = "devops.terraform.{{.DOMAIN}}"
+    bucket = "phonqpvt1-{{.DOMAIN}}-remote-tfstate"
     key    = "{{.KEY_PATH}}/state.tfstate"
     region = "ap-southeast-1"
-    dynamodb_table = "ngp-terraform-lock-backend-replication"
+    dynamodb_table = "phonqpvt1-local.backend-remote-tfstate-lock"
   }
 }
 
