@@ -8,13 +8,13 @@ locals {
 
 resource "aws_s3_bucket" "this" {
   bucket              = local.config.bucket
-  force_destroy       = local.config
+  force_destroy       = local.config.force_destroy
   object_lock_enabled = local.config.object_lock_enabled
   tags                = merge(local.config.tags, {})
 
   lifecycle {
     ignore_changes = [
-      local.config.tags
+      tags
     ]
   }
 }
