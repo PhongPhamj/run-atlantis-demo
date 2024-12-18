@@ -1,5 +1,9 @@
 locals {
-  config = yamldecode(file("./resources/demos3creation.yaml"))
+  yaml_files = fileset("./resources", "*.yaml")
+  
+  config = merge([
+    for file_path in local.yaml_files : yamldecode(file((join("", ["./resources/", file_path]))))
+  ]...)
 }
 
 resource "aws_s3_bucket" "this" {
