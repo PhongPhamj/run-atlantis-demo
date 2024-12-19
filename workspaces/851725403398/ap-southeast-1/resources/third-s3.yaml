@@ -1,4 +1,4 @@
-bucket: phongvupham-unique-name-161618122024
+bucket: phongvupham-unique-s3-name-134419122024
 acl: private
 force_destroy: true
 object_lock_enabled: false
