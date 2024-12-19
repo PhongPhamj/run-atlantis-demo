@@ -1,0 +1,8 @@
+bucket: phongvupham-unique-s3-name-1350-19122024
+acl: private
+force_destroy: true
+object_lock_enabled: false
+enable_versioning: false
+tags:
+  Environment: dev
+  Project: MyS3BucketProject
